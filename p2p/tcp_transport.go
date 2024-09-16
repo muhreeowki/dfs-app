@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 )
 
 // TCPPeer represents the remote node over a TCP established connection
@@ -31,6 +30,7 @@ type TCPTransportOpts struct {
 	ListenAddress string
 	HandshakeFunc HandshakeFunc
 	Decoder       Decoder
+	OnPeer        func(Peer) error
 }
 
 // TCPTransport is a representation of a TCP Transport
@@ -38,9 +38,6 @@ type TCPTransport struct {
 	TCPTransportOpts
 	listner net.Listener
 	rpcchan chan RPC
-
-	mu    sync.RWMutex
-	peers map[net.Addr]Peer
 }
 
 // NewTCPTransport returns a new TCPTransport struct
@@ -85,19 +82,29 @@ func (t *TCPTransport) startAcceptLoop() {
 
 // handleConn handles new connections to the listenAddress
 func (t *TCPTransport) handleConn(conn net.Conn) {
+	var err error
+
 	peer := NewTCPPeer(conn, true)
 
-	if err := t.HandshakeFunc(peer); err != nil {
-		conn.Close()
-		fmt.Printf("TCP handshake error: %s\n", err)
+	defer func() {
+		fmt.Printf("dropping peer connection: %s\n", err)
+		peer.Close()
+	}()
+
+	if err = t.HandshakeFunc(peer); err != nil {
 		return
+	}
+
+	if t.OnPeer != nil {
+		if err = t.OnPeer(peer); err != nil {
+			return
+		}
 	}
 
 	rpc := RPC{}
 	for {
-		if err := t.Decoder.Decode(conn, &rpc); err != nil {
+		if err = t.Decoder.Decode(conn, &rpc); err != nil {
 			if err == io.EOF {
-				fmt.Printf("closed connection: %+v\n", conn)
 				return
 			}
 			fmt.Printf("TCP error %s\n", err)
