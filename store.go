@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"crypto/md5"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -12,7 +11,16 @@ import (
 )
 
 // PathTransformFunc is a function that transforms a key into a path.
-type PathTransformFunc func(string) string
+type PathTransformFunc func(string) PathKey
+
+type PathKey struct {
+	PathName string
+	Original string
+}
+
+func (p PathKey) Filename() string {
+	return fmt.Sprintf("%s/%s", p.PathName, p.Original)
+}
 
 // DefaultPathTransformFunc is the default path transform function.
 var DefaultPathTransformFunc = func(key string) string {
@@ -20,7 +28,7 @@ var DefaultPathTransformFunc = func(key string) string {
 }
 
 // CASPathTransformFunc is a path transform function that uses a content-addressable storage layout.
-func CASPathTransformFunc(key string) string {
+func CASPathTransformFunc(key string) PathKey {
 	hash := sha1.Sum([]byte(key))
 	hashStr := hex.EncodeToString(hash[:])
 
@@ -33,7 +41,10 @@ func CASPathTransformFunc(key string) string {
 		paths[i] = hashStr[from:to]
 	}
 
-	return strings.Join(paths, "/")
+	return PathKey{
+		PathName: strings.Join(paths, "/"),
+		Original: hashStr,
+	}
 }
 
 // StoreOpts contains options for a Store.
@@ -56,26 +67,21 @@ func NewStore(opts StoreOpts) *Store {
 // writeStream writes the contents of r to the object at key.
 func (s *Store) writeStream(key string, r io.Reader) error {
 	// Get the encoded path name
-	pathName := s.PathTransformFunc(key)
+	pathKey := s.PathTransformFunc(key)
 	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(pathName, os.ModePerm); err != nil {
+	if err := os.MkdirAll(pathKey.PathName, os.ModePerm); err != nil {
 		return err
 	}
 
-	// Create an MD5 hash of the file contents to use as the filename
-	buf := new(bytes.Buffer)
-	io.Copy(buf, r)
-	filenameBytes := md5.Sum(buf.Bytes())
-	filename := hex.EncodeToString(filenameBytes[:])
-	fullFilePath := pathName + "/" + filename
-
 	// Create the file
+	fullFilePath := pathKey.Filename()
 	f, err := os.Create(fullFilePath)
 	if err != nil {
 		return err
 	}
+
 	// Write the contents to the file
-	n, err := io.Copy(f, buf)
+	n, err := io.Copy(f, r)
 	if err != nil {
 		return err
 	}
