@@ -5,9 +5,20 @@ import (
 	"testing"
 )
 
+func TestPathTransformFunc(t *testing.T) {
+	key := "somecoolpicture"
+	pathname := CASPathTransformFunc(key)
+
+	expectedPathname := "ec529/ae0c6/bb805/38eab/bb177/cc737/f7bf5/d9f01"
+
+	if pathname != expectedPathname {
+		t.Errorf("expected pathname %s, got %s", expectedPathname, pathname)
+	}
+}
+
 func TestStore(t *testing.T) {
 	opts := StoreOpts{
-		PathTransformFunc: DefaultPathTransformFunc,
+		PathTransformFunc: CASPathTransformFunc,
 	}
 
 	s := NewStore(opts)
