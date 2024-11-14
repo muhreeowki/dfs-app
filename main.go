@@ -12,22 +12,23 @@ func main() {
 		ListenAddress: ":3000",
 		HandshakeFunc: p2p.NOPHandshakeFunc,
 		Decoder:       p2p.DefaultDecoder{},
-		OnPeer: func(p2p.Peer) error {
+		OnPeer: func(peer p2p.Peer) error {
 			fmt.Println("Doing some logic with the peer outside of TCPTransport")
+			peer.Close() // Testing to see what happens when the peer is closed before the transport is closed
 			return nil
 		}, // fmt.Errorf("failed the on peer func") },
 	}
 
-	tr := p2p.NewTCPTransport(opts)
+	transport := p2p.NewTCPTransport(opts)
 
 	go func() {
 		for {
-			msg := <-tr.Consume()
+			msg := <-transport.Consume()
 			fmt.Printf("%+v\n", msg)
 		}
 	}()
 
-	if err := tr.ListenAndAccept(); err != nil {
+	if err := transport.ListenAndAccept(); err != nil {
 		log.Fatal(err)
 	}
 
