@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"io/ioutil"
 	"testing"
 )
 
@@ -16,7 +18,7 @@ func TestPathTransformFunc(t *testing.T) {
 		t.Errorf("expected pathname %s, got %s", expectedPathname, pathKey)
 	}
 
-	if pathKey.Original != expectedOriginalKey {
+	if pathKey.Filename != expectedOriginalKey {
 		t.Errorf("expected original %s, got %s", expectedPathname, pathKey)
 	}
 }
@@ -27,10 +29,46 @@ func TestStore(t *testing.T) {
 	}
 
 	s := NewStore(opts)
+	key := "footballpicture"
 
-	data := bytes.NewReader([]byte("hello world"))
+	data := []byte("hello world")
 
-	if err := s.writeStream("mytestfile", data); err != nil {
+	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
 		t.Errorf("writeStream failed: %v", err)
+	}
+
+	fmt.Printf("wrote to key: %s value: %s", key, data)
+
+	r, err := s.Read(key)
+	if err != nil {
+		t.Errorf("Read failed: %v", err)
+	}
+
+	b, _ := ioutil.ReadAll(r)
+	if string(b) != string(data) {
+		t.Errorf("Read failed: %v", err)
+	}
+
+	fmt.Printf("read value: %s from key: %s", string(b), key)
+}
+
+func TestStoreDeleteKey(t *testing.T) {
+	opts := StoreOpts{
+		PathTransformFunc: CASPathTransformFunc,
+	}
+
+	s := NewStore(opts)
+	key := "footballpicture"
+
+	data := []byte("hello world")
+
+	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+		t.Errorf("writeStream failed: %v", err)
+	}
+
+	fmt.Printf("wrote to key: %s value: %s", key, data)
+
+	if err := s.Delete(key); err != nil {
+		t.Errorf("Delete failed: %v", err)
 	}
 }

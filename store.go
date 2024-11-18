@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -15,11 +17,11 @@ type PathTransformFunc func(string) PathKey
 
 type PathKey struct {
 	PathName string
-	Original string
+	Filename string
 }
 
-func (p PathKey) Filename() string {
-	return fmt.Sprintf("%s/%s", p.PathName, p.Original)
+func (p PathKey) FullPath() string {
+	return fmt.Sprintf("%s/%s", p.PathName, p.Filename)
 }
 
 // DefaultPathTransformFunc is the default path transform function.
@@ -43,7 +45,7 @@ func CASPathTransformFunc(key string) PathKey {
 
 	return PathKey{
 		PathName: strings.Join(paths, "/"),
-		Original: hashStr,
+		Filename: hashStr,
 	}
 }
 
@@ -64,6 +66,49 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
+func (s *Store) Has(key string) bool {
+	pathKey := s.PathTransformFunc(key)
+
+	_, err := os.Stat(pathKey.FullPath())
+	if err != fs.ErrNotExist {
+		return false
+	}
+
+	return true
+}
+
+// Delete deletes the file at key.
+func (s *Store) Delete(key string) error {
+	pathKey := s.PathTransformFunc(key)
+
+	defer func() {
+		log.Printf("deleted [%s] from disk", pathKey.FullPath())
+	}()
+
+	return os.Remove(pathKey.FullPath())
+}
+
+// Read reads the contents of the object at key and returns them as a reader.
+func (s *Store) Read(key string) (io.Reader, error) {
+	r, err := s.readStream(key)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, r)
+
+	return buf, err
+}
+
+// readStream reads the contents of the object at key.
+func (s *Store) readStream(key string) (io.ReadCloser, error) {
+	pathKey := s.PathTransformFunc(key)
+	fullFilePath := pathKey.FullPath()
+	return os.Open(fullFilePath)
+}
+
 // writeStream writes the contents of r to the object at key.
 func (s *Store) writeStream(key string, r io.Reader) error {
 	// Get the encoded path name
@@ -74,7 +119,7 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 	}
 
 	// Create the file
-	fullFilePath := pathKey.Filename()
+	fullFilePath := pathKey.FullPath()
 	f, err := os.Create(fullFilePath)
 	if err != nil {
 		return err
