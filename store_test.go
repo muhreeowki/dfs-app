@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"testing"
 )
 
@@ -37,7 +37,7 @@ func TestStore(t *testing.T) {
 		t.Errorf("writeStream failed: %v", err)
 	}
 
-	fmt.Printf("wrote to key: %s value: %s", key, data)
+	log.Printf("wrote to key: %s value: %s", key, data)
 
 	r, err := s.Read(key)
 	if err != nil {
@@ -49,24 +49,7 @@ func TestStore(t *testing.T) {
 		t.Errorf("Read failed: %v", err)
 	}
 
-	fmt.Printf("read value: %s from key: %s", string(b), key)
-}
-
-func TestStoreDeleteKey(t *testing.T) {
-	opts := StoreOpts{
-		PathTransformFunc: CASPathTransformFunc,
-	}
-
-	s := NewStore(opts)
-	key := "footballpicture"
-
-	data := []byte("hello world")
-
-	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
-		t.Errorf("writeStream failed: %v", err)
-	}
-
-	fmt.Printf("wrote to key: %s value: %s", key, data)
+	log.Printf("read value: %s from key: %s", string(b), key)
 
 	if err := s.Delete(key); err != nil {
 		t.Errorf("Delete failed: %v", err)
