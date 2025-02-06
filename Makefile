@@ -1,8 +1,8 @@
 build:
-	@go build -o bin/dfs-app
+	@go build -o bin/dfs
 
 run: build
-	@./bin/dfs-app
+	@./bin/dfs
 
 test:
 	@go test ./... -v 
