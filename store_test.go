@@ -11,9 +11,8 @@ import (
 
 func TestPathTransformFunc(t *testing.T) {
 	key := "himom"
-	pathkey := CASPathTransformFunc(key)
-	fmt.Println(pathkey)
-	expectedPath := "f3ee709b/f2a8e4ff/4f6b554e/5ec816f0/79153608"
+	pathkey := CASPathTransformFunc(key, "bossstore")
+	expectedPath := "bossstore/f3ee709b/f2a8e4ff/4f6b554e/5ec816f0/79153608"
 	expectedFilename := "f3ee709bf2a8e4ff4f6b554e5ec816f079153608"
 	if pathkey.Path != expectedPath {
 		t.Errorf("have %s want %s", pathkey.Path, expectedPath)
@@ -31,9 +30,12 @@ func TestStore(t *testing.T) {
 	key := "swag"
 	// Test Writer
 	data := []byte("jesuslovesmethisiknow")
-	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+	var n int
+	n, err := s.writeStream(key, bytes.NewReader(data))
+	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Printf("written (%d) bytes to disk: %s", n, s.TransFormPath(key))
 	// Test Reading
 	r, err := s.Read(key)
 	if err != nil {
@@ -43,7 +45,6 @@ func TestStore(t *testing.T) {
 	if string(b) != string(data) {
 		t.Errorf("have %s want %s", b, data)
 	}
-	fmt.Println(string(b))
 	// Test Has
 	assert.EqualValues(t, true, s.Has(key))
 	// Test Deleting
