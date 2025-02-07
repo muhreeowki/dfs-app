@@ -14,6 +14,7 @@ import (
 type PathKey struct {
 	Path     string
 	Filename string
+	Root     string
 }
 
 func (pk *PathKey) AbsPath() string {
@@ -44,6 +45,7 @@ func CASPathTransformFunc(key string) *PathKey {
 	return &PathKey{
 		Path:     strings.Join(paths, "/"),
 		Filename: hashStr,
+		Root:     paths[0],
 	}
 }
 
@@ -62,6 +64,17 @@ func NewStore(opts StoreOpts) *Store {
 	return &Store{
 		StoreOpts: opts,
 	}
+}
+
+// Has returns true if a file exists at the provided
+// key otherwise it returns false
+func (s *Store) Has(key string) bool {
+	pathKey := s.PathTransformFunc(key)
+	_, err := os.Stat(pathKey.AbsPath())
+	if err != nil && os.IsNotExist(err.(*os.PathError).Err) {
+		return false
+	}
+	return true
 }
 
 // Read reads the data from the file into an io Reader
@@ -106,4 +119,10 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 	}
 	log.Printf("written %d bytes to file", n)
 	return nil
+}
+
+// Delete deletes the file refered to by the key
+func (s *Store) Delete(key string) error {
+	pathKey := s.PathTransformFunc(key)
+	return os.RemoveAll(pathKey.Root)
 }

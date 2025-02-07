@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPathTransformFunc(t *testing.T) {
@@ -37,10 +39,17 @@ func TestStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	b, err := io.ReadAll(r)
 	if string(b) != string(data) {
 		t.Errorf("have %s want %s", b, data)
 	}
 	fmt.Println(string(b))
+	// Test Has
+	assert.EqualValues(t, true, s.Has(key))
+	// Test Deleting
+	if err := s.Delete(key); err != nil {
+		t.Fatal(err)
+	}
+	// Test Has
+	assert.EqualValues(t, false, s.Has(key))
 }
