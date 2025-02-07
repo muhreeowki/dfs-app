@@ -14,6 +14,7 @@ type TCPPeer struct {
 	outbound bool
 }
 
+// NewTCPPeer returns a new TCPPeer struct
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
 		conn:     conn,
@@ -21,12 +22,16 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
+type TCPTransportOpts struct {
+	ListenAddr string
+	ShakeHands HandshakeFunc
+	Decoder    Decoder
+}
+
 // TCPTransport is a Transport that uses the TCP/IP protocol
 type TCPTransport struct {
-	listenAddr string
-	listener   net.Listener
-	shakeHands HandshakeFunc
-	decoder    Decoder
+	TCPTransportOpts
+	listener net.Listener
 
 	mu    sync.RWMutex
 	peers map[net.Addr]bool
@@ -34,17 +39,16 @@ type TCPTransport struct {
 
 // NewTCPTransport returns a new TCPTransport struct
 // with the provided listenAddr
-func NewTCPTransport(listenAddr string) *TCPTransport {
+func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
-		listenAddr: listenAddr,
-		shakeHands: NopHandshakeFunc,
+		TCPTransportOpts: opts,
 	}
 }
 
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
 
-	t.listener, err = net.Listen("tcp", t.listenAddr)
+	t.listener, err = net.Listen("tcp", t.ListenAddr)
 	if err != nil {
 		return err
 	}
@@ -56,7 +60,7 @@ func (t *TCPTransport) ListenAndAccept() error {
 }
 
 func (t *TCPTransport) acceptLoop() {
-	log.Printf("Listening on %s ...", t.listenAddr)
+	log.Printf("Listening on %s ...", t.ListenAddr)
 	for {
 		conn, err := t.listener.Accept()
 		if err != nil {
@@ -77,7 +81,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 	log.Printf("New Incomming Connection %+v\n", peer)
 
 	// Shake Hands with the peer connecting, (validate the connection)
-	if err := t.shakeHands(peer); err != nil {
+	if err := t.ShakeHands(peer); err != nil {
 		fmt.Errorf("TCP handshake error: %s\n")
 		return
 	}
@@ -88,7 +92,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 
 	msg := &Msg{}
 	for {
-		if err := t.decoder.Decode(conn, msg); err != nil {
+		if err := t.Decoder.Decode(conn, msg); err != nil {
 			fmt.Errorf("TCP decode error: %s\n")
 			continue
 		}
