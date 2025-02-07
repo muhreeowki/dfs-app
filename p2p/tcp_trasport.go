@@ -32,6 +32,7 @@ type TCPTransportOpts struct {
 	ListenAddr string
 	ShakeHands HandshakeFunc
 	Decoder    Decoder
+	OnPeer     func(Peer) error
 }
 
 // TCPTransport is a Transport that uses the TCP/IP protocol.
@@ -87,7 +88,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 	// Create a peer
 	peer := NewTCPPeer(conn, true)
 	defer func() {
-		conn.Close()
+		peer.Close()
 		log.Printf("Closed Connection %+v\n", peer)
 	}()
 	log.Printf("New Incomming Connection %+v\n", peer)
@@ -96,17 +97,23 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 		fmt.Errorf("TCP handshake error: %s\n", err)
 		return
 	}
+	// Call OnPeer validation function
+	if t.OnPeer != nil {
+		if err := t.OnPeer(peer); err != nil {
+			log.Printf("TCP OnPeer error: %s\n", err)
+			return
+		}
+	}
 	// Read loop
-	rpc := RPC{From: conn.RemoteAddr()}
+	rpc := RPC{From: peer.conn.RemoteAddr()}
 	for {
 		if err := t.Decoder.Decode(peer.conn, &rpc); err != nil {
-			if err == io.EOF {
+			if err == io.EOF || err.(*net.OpError).Err == net.ErrClosed {
 				return
 			}
-			fmt.Errorf("TCP decode error: %s\n", err)
+			log.Printf("TCP read error: %s\n", err)
 			continue
 		}
-
 		t.rpcch <- rpc
 	}
 }

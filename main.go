@@ -11,6 +11,10 @@ func main() {
 		ListenAddr: ":3000",
 		ShakeHands: p2p.NOPHandshakeFunc,
 		Decoder:    p2p.NOPDecoder{},
+		OnPeer: func(p p2p.Peer) error {
+			log.Printf("doing some logic with peer outside of transport")
+			return nil
+		},
 	}
 
 	tr := p2p.NewTCPTransport(tcpOpts)
