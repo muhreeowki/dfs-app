@@ -145,3 +145,7 @@ func (s *Store) Delete(key string) error {
 	pathKey := s.TransFormPath(key)
 	return os.RemoveAll(pathKey.Root)
 }
+
+func (s *Store) Clear() error {
+	return os.RemoveAll(s.StorageFolder)
+}
