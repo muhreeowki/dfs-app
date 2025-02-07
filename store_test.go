@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"testing"
 
@@ -39,8 +38,7 @@ func TestStoreWriter(t *testing.T) {
 	// Test Writer
 	s := newStore()
 	defer teardown(t, s)
-	n, err := createTestData(s)
-	fmt.Printf("written (%d) bytes to disk: %s\n", n, s.TransFormPath(key()))
+	_, err := createTestData(s)
 	assert.Nil(t, err)
 }
 
@@ -57,7 +55,6 @@ func TestStoreRead(t *testing.T) {
 	b, err := io.ReadAll(r)
 	assert.Nil(t, err)
 	assert.EqualValuesf(t, string(data()), string(b), "have %s want %s\n", b, data())
-	fmt.Printf("contents of %s: %s\n", s.TransFormPath(key()), b)
 }
 
 func TestStoreHas(t *testing.T) {
@@ -65,7 +62,6 @@ func TestStoreHas(t *testing.T) {
 	defer teardown(t, s)
 	createTestData(s)
 	assert.EqualValues(t, true, s.Has(key()))
-	fmt.Printf("file exists: %s\n", s.TransFormPath(key()))
 }
 
 func TestStoreDelete(t *testing.T) {
@@ -75,5 +71,4 @@ func TestStoreDelete(t *testing.T) {
 	err := s.Delete(key())
 	assert.Nil(t, err)
 	assert.EqualValues(t, false, s.Has(key()))
-	fmt.Printf("deleted: %s\n", s.TransFormPath(key()))
 }

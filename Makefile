@@ -5,4 +5,4 @@ run: build
 	@./bin/dfs
 
 test:
-	@go test ./... -v 
+	@go test ./...
