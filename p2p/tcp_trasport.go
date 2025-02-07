@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -86,15 +87,17 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 		return
 	}
 
-	// Read loop
-
-	type Msg struct{}
-
-	msg := &Msg{}
+	// Read loo
+	msg := &Message{From: conn.RemoteAddr()}
 	for {
-		if err := t.Decoder.Decode(conn, msg); err != nil {
+		if err := t.Decoder.Decode(peer.conn, msg); err != nil {
+			if err == io.EOF {
+				return
+			}
 			fmt.Errorf("TCP decode error: %s\n")
 			continue
 		}
+
+		log.Printf("%+v\n", msg)
 	}
 }

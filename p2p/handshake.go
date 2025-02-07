@@ -4,4 +4,4 @@ package p2p
 // called to handle and validate a connection
 type HandshakeFunc func(Peer) error
 
-var NopHandshakeFunc HandshakeFunc = func(p Peer) error { return nil }
+var NOPHandshakeFunc HandshakeFunc = func(p Peer) error { return nil }
