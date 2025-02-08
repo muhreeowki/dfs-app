@@ -91,10 +91,7 @@ func (s *Store) TransFormPath(key string) *PathKey {
 func (s *Store) Has(key string) bool {
 	pathKey := s.TransFormPath(key)
 	_, err := os.Stat(pathKey.AbsPath())
-	if err != nil && os.IsNotExist(err.(*os.PathError).Err) {
-		return false
-	}
-	return true
+	return !(err != nil && os.IsNotExist(err.(*os.PathError).Err))
 }
 
 // Read reads the data from the file into an io Reader
@@ -113,6 +110,11 @@ func (s *Store) Read(key string) (io.Reader, error) {
 func (s *Store) readSteam(key string) (io.ReadCloser, error) {
 	pathKey := s.TransFormPath(key)
 	return os.Open(pathKey.AbsPath())
+}
+
+// Write writes the data into the file refered to by the key
+func (s *Store) Write(key string, r io.Reader) (int, error) {
+	return s.writeStream(key, r)
 }
 
 // writeStream takes a key and an io.Reader
@@ -146,6 +148,7 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(pathKey.Root)
 }
 
+// Clear removes all the files in the storage folder
 func (s *Store) Clear() error {
 	return os.RemoveAll(s.StorageFolder)
 }
