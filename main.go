@@ -23,18 +23,18 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 		StorageFolder:     listenAddr[1:] + "_network",
 		BootstrapNodes:    nodes,
 	}
-	return NewFileServer(serverOpts)
+	s := NewFileServer(serverOpts)
+	tcpTransport.OnPeer = s.OnPeer
+	return s
 }
 
 func main() {
 	s1 := makeServer(":3000")
 	s2 := makeServer(":4000", ":3000")
-
 	go func() {
 		if err := s1.Start(); err != nil {
 			log.Fatal("s1 start error: ", err)
 		}
 	}()
-
 	log.Fatal("s2 start error: ", s2.Start())
 }

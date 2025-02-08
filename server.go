@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"sync"
 
 	"github.com/muhreeowki/dfs/p2p"
 )
@@ -17,6 +18,10 @@ type FileServerOpts struct {
 // FileServer is a server that performs file actions on a Store
 type FileServer struct {
 	FileServerOpts
+
+	peerLock sync.Mutex
+	peers    map[string]p2p.Peer
+
 	store  *Store
 	quitch chan struct{}
 }
@@ -29,13 +34,23 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 			StorageFolder:     opts.StorageFolder,
 			PathTransformFunc: opts.PathTransformFunc,
 		}),
-		quitch: make(chan struct{}),
+		quitch:   make(chan struct{}),
+		peers:    make(map[string]p2p.Peer),
+		peerLock: sync.Mutex{},
 	}
 }
 
 // Stop close all the channels
 func (s *FileServer) Stop() {
 	close(s.quitch)
+}
+
+func (s *FileServer) OnPeer(p p2p.Peer) error {
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	s.peers[p.RemoteAddr().String()] = p
+	log.Printf("connected with peer: %s", p.RemoteAddr())
+	return nil
 }
 
 // loop is an accept loop that waits for communication over channels
