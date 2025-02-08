@@ -10,6 +10,16 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
+type Message struct {
+	From    string
+	Payload any
+}
+
+type DataMessage struct {
+	Key  string
+	Data []byte
+}
+
 // FileServerOpts is an options struct for FileServer
 type FileServerOpts struct {
 	Transport         p2p.Transport
@@ -43,19 +53,14 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	}
 }
 
-type Payload struct {
-	Key  string
-	Data []byte
-}
-
 // broadcast sends data to all known connected peers
-func (s *FileServer) broadcast(p *Payload) error {
+func (s *FileServer) broadcast(msg *Message) error {
 	peers := []io.Writer{}
 	for _, peer := range s.peers {
 		peers = append(peers, peer)
 	}
 	mw := io.MultiWriter(peers...)
-	return gob.NewEncoder(mw).Encode(p)
+	return gob.NewEncoder(mw).Encode(msg)
 }
 
 func (s *FileServer) StoreData(key string, r io.Reader) error {
@@ -65,12 +70,15 @@ func (s *FileServer) StoreData(key string, r io.Reader) error {
 	if _, err := s.store.Write(key, tee); err != nil {
 		return err
 	}
-	p := &Payload{
+	dataMsg := &DataMessage{
 		Key:  key,
 		Data: buf.Bytes(),
 	}
 	// 2. Broadcast the file to all known connected peers
-	return s.broadcast(p)
+	return s.broadcast(&Message{
+		From:    "muh",
+		Payload: dataMsg,
+	})
 }
 
 // loop is an accept loop that waits for communication over channels
@@ -82,16 +90,27 @@ func (s *FileServer) loop() {
 	}()
 	for {
 		select {
-		case msg := <-s.Transport.Consume():
-			var p Payload
-			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&p); err != nil {
-				log.Fatalf("Decoder error: %+v\n", err)
+		case rpc := <-s.Transport.Consume():
+			var msg Message
+			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
+				log.Printf("Decoder error: %+v\n", err)
 			}
-			log.Printf("%+v\n", string(p.Data))
+			if err := s.handleMessage(&msg); err != nil {
+				log.Printf("Message error: %+v\n", err)
+			}
 		case <-s.quitch:
 			return
 		}
 	}
+}
+
+func (s *FileServer) handleMessage(msg *Message) error {
+	switch v := msg.Payload.(type) {
+	case *DataMessage:
+		log.Printf("recieved data: %+v\n", v)
+	}
+	log.Printf("%s\n", msg.Payload)
+	return nil
 }
 
 // bootstrapNetwork connects to a list of nodes
