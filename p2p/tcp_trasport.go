@@ -10,33 +10,25 @@ import (
 // TCPPeer represents the remote over a
 // TCP established connection.
 type TCPPeer struct {
-	conn     net.Conn
+	// The underliying connection of the peer, (tcp connection)
+	net.Conn
+	// Whether or not the connection is outbound (sending a connection)
+	// or inbound, (recieving a connection)
 	outbound bool
 }
 
 // NewTCPPeer returns a new TCPPeer struct
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
-		conn:     conn,
+		Conn:     conn,
 		outbound: outbound,
 	}
 }
 
 // Send implements the Peer interface
 func (p *TCPPeer) Send(b []byte) error {
-	_, err := p.conn.Write(b)
+	_, err := p.Conn.Write(b)
 	return err
-}
-
-// RemoteAddr implements the Peer interface and
-// returns the net Addr of its underlying connection
-func (p *TCPPeer) RemoteAddr() net.Addr {
-	return p.conn.RemoteAddr()
-}
-
-// Close implements the Peer interface
-func (p *TCPPeer) Close() error {
-	return p.conn.Close()
 }
 
 // TCPTransportOpts is an options struct for the TCPTransport
@@ -136,15 +128,16 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 		}
 	}
 	// Read loop
-	rpc := RPC{From: peer.conn.RemoteAddr()}
+	rpc := RPC{From: peer.Conn.RemoteAddr()}
 	for {
-		if err := t.Decoder.Decode(peer.conn, &rpc); err != nil {
+		if err := t.Decoder.Decode(peer.Conn, &rpc); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 				return
 			}
 			log.Printf("TCP read error: %s\n", err)
 			continue
 		}
+		// log.Printf("TCPTransport recieved message: %s", rpc.Payload)
 		t.rpcch <- rpc
 	}
 }

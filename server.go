@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
+	"io"
 	"log"
 	"sync"
 
@@ -40,17 +43,34 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	}
 }
 
-// Stop close all the channels
-func (s *FileServer) Stop() {
-	close(s.quitch)
+type Payload struct {
+	Key  string
+	Data []byte
 }
 
-func (s *FileServer) OnPeer(p p2p.Peer) error {
-	s.peerLock.Lock()
-	defer s.peerLock.Unlock()
-	s.peers[p.RemoteAddr().String()] = p
-	log.Printf("connected with peer: %s", p.RemoteAddr())
-	return nil
+// broadcast sends data to all known connected peers
+func (s *FileServer) broadcast(p *Payload) error {
+	peers := []io.Writer{}
+	for _, peer := range s.peers {
+		peers = append(peers, peer)
+	}
+	mw := io.MultiWriter(peers...)
+	return gob.NewEncoder(mw).Encode(p)
+}
+
+func (s *FileServer) StoreData(key string, r io.Reader) error {
+	// 1. Store the file to disk
+	buf := new(bytes.Buffer)
+	tee := io.TeeReader(r, buf)
+	if _, err := s.store.Write(key, tee); err != nil {
+		return err
+	}
+	p := &Payload{
+		Key:  key,
+		Data: buf.Bytes(),
+	}
+	// 2. Broadcast the file to all known connected peers
+	return s.broadcast(p)
 }
 
 // loop is an accept loop that waits for communication over channels
@@ -63,14 +83,18 @@ func (s *FileServer) loop() {
 	for {
 		select {
 		case msg := <-s.Transport.Consume():
-			log.Printf("new message: %+v\n", msg)
-			break
+			var p Payload
+			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&p); err != nil {
+				log.Fatalf("Decoder error: %+v\n", err)
+			}
+			log.Printf("%+v\n", string(p.Data))
 		case <-s.quitch:
 			return
 		}
 	}
 }
 
+// bootstrapNetwork connects to a list of nodes
 func (s *FileServer) bootstrapNetwork() error {
 	for _, addr := range s.BootstrapNodes {
 		if len(addr) == 0 {
@@ -94,5 +118,19 @@ func (s *FileServer) Start() error {
 	}
 	s.bootstrapNetwork()
 	s.loop()
+	return nil
+}
+
+// Stop close all the channels
+func (s *FileServer) Stop() {
+	close(s.quitch)
+}
+
+// OnPeer is a function that handles a peer connection
+func (s *FileServer) OnPeer(p p2p.Peer) error {
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	s.peers[p.RemoteAddr().String()] = p
+	log.Printf("connected with peer: %s", p.RemoteAddr())
 	return nil
 }

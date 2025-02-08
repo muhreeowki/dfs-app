@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"log"
+	"time"
 
 	"github.com/muhreeowki/dfs/p2p"
 )
@@ -32,9 +34,17 @@ func main() {
 	s1 := makeServer(":3000")
 	s2 := makeServer(":4000", ":3000")
 	go func() {
-		if err := s1.Start(); err != nil {
-			log.Fatal("s1 start error: ", err)
-		}
+		log.Fatal("S1 Failed: ", s1.Start())
 	}()
-	log.Fatal("s2 start error: ", s2.Start())
+
+	time.Sleep(time.Second * 3)
+
+	go s2.Start()
+
+	time.Sleep(time.Second * 2)
+
+	data := bytes.NewReader([]byte("some massive data file\n"))
+	s2.StoreData("john11", data)
+
+	select {}
 }
