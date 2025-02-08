@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -57,6 +58,11 @@ func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcch
 }
 
+// Close implements the Transport interface
+func (t *TCPTransport) Close() error {
+	return t.listener.Close()
+}
+
 // ListenAndAccept listens on the listenAddr for connections,
 // accepts communication from remote nodes.
 func (t *TCPTransport) ListenAndAccept() (err error) {
@@ -66,16 +72,19 @@ func (t *TCPTransport) ListenAndAccept() (err error) {
 	}
 	// Accept Loop
 	go t.acceptLoop()
+	log.Printf("TCP Transport Listening on: %s\n", t.ListenAddr)
 	return nil
 }
 
 // acceptLoop is a function responsible for listening
 // out for and accepting new connections.
 func (t *TCPTransport) acceptLoop() {
-	log.Printf("Listening on %s ...", t.ListenAddr)
 	for {
 		conn, err := t.listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			log.Printf("TCPTransport Accept Error: %s\n", err)
 		}
 		go t.handleConn(conn)
@@ -108,7 +117,7 @@ func (t *TCPTransport) handleConn(conn net.Conn) {
 	rpc := RPC{From: peer.conn.RemoteAddr()}
 	for {
 		if err := t.Decoder.Decode(peer.conn, &rpc); err != nil {
-			if err == io.EOF || err.(*net.OpError).Err == net.ErrClosed {
+			if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 				return
 			}
 			log.Printf("TCP read error: %s\n", err)

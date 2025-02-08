@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/muhreeowki/dfs/p2p"
 )
@@ -16,19 +17,22 @@ func main() {
 			return nil
 		},
 	}
+	tcpTransport := p2p.NewTCPTransport(tcpOpts)
 
-	tr := p2p.NewTCPTransport(tcpOpts)
-
-	go func() {
-		for {
-			msg := <-tr.Consume()
-			log.Printf("%+v\n", msg)
-		}
-	}()
-
-	if err := tr.ListenAndAccept(); err != nil {
-		log.Fatal(err)
+	serverOpts := FileServerOpts{
+		Transport:         tcpTransport,
+		PathTransformFunc: CASPathTransformFunc,
+		StorageFolder:     "bobross",
 	}
 
-	select {}
+	server := NewFileServer(serverOpts)
+
+	go func() {
+		time.Sleep(time.Second * 3)
+		server.Stop()
+	}()
+
+	if err := server.Start(); err != nil {
+		log.Fatal(err)
+	}
 }

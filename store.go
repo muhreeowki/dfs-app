@@ -33,7 +33,7 @@ var DefaultPathTransformFunc = func(key, storageFolder string) *PathKey {
 	}
 }
 
-// CASPathTransformFunc takes a key and returns a PathKey
+// CASPathTransformFunc is a PathTransformFunc that takes a key and returns a PathKey
 // with a pathname and filename derived from the hashed key
 func CASPathTransformFunc(key, storageFolder string) *PathKey {
 	// Hash the key
@@ -91,7 +91,7 @@ func (s *Store) TransFormPath(key string) *PathKey {
 func (s *Store) Has(key string) bool {
 	pathKey := s.TransFormPath(key)
 	_, err := os.Stat(pathKey.AbsPath())
-	return !(err != nil && os.IsNotExist(err.(*os.PathError).Err))
+	return !(err != nil && os.IsNotExist(err))
 }
 
 // Read reads the data from the file into an io Reader
