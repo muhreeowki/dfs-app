@@ -58,9 +58,21 @@ func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcch
 }
 
-// Close implements the Transport interface
+// Close implements the Transport interface.
+// It closes the listener.
 func (t *TCPTransport) Close() error {
 	return t.listener.Close()
+}
+
+// Dail implements the Transport interface.
+// It sends an outbound connection to an addr over tcp.
+func (t *TCPTransport) Dail(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+	go t.handleConn(conn, true)
+	return nil
 }
 
 // ListenAndAccept listens on the listenAddr for connections,
@@ -87,15 +99,15 @@ func (t *TCPTransport) acceptLoop() {
 			}
 			log.Printf("TCPTransport Accept Error: %s\n", err)
 		}
-		go t.handleConn(conn)
+		go t.handleConn(conn, false)
 	}
 }
 
 // handleConn handles the connection ones it has been established
 // and reads the communication from the connection.
-func (t *TCPTransport) handleConn(conn net.Conn) {
+func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	// Create a peer
-	peer := NewTCPPeer(conn, true)
+	peer := NewTCPPeer(conn, outbound)
 	defer func() {
 		peer.Close()
 		log.Printf("Closed Connection %+v\n", peer)

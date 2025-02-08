@@ -11,6 +11,7 @@ type FileServerOpts struct {
 	Transport         p2p.Transport
 	StorageFolder     string
 	PathTransformFunc PathTransformFunc
+	BootstrapNodes    []string
 }
 
 // FileServer is a server that performs file actions on a Store
@@ -37,9 +38,9 @@ func (s *FileServer) Stop() {
 	close(s.quitch)
 }
 
-// Loop is an accept loop that waits for communication over channels
+// loop is an accept loop that waits for communication over channels
 // and performs some logic with it
-func (s *FileServer) Loop() {
+func (s *FileServer) loop() {
 	defer func() {
 		log.Println("FileServer stopping due to user quit action.")
 		s.Transport.Close()
@@ -55,11 +56,28 @@ func (s *FileServer) Loop() {
 	}
 }
 
+func (s *FileServer) bootstrapNetwork() error {
+	for _, addr := range s.BootstrapNodes {
+		if len(addr) == 0 {
+			continue
+		}
+		go func() {
+			if err := s.Transport.Dail(addr); err != nil {
+				log.Printf("Failed to connect to %v: %v\n", addr, err)
+			} else {
+				log.Println("Connected to: ", addr)
+			}
+		}()
+	}
+	return nil
+}
+
 // Start starts the FileServer and it listens through the provided Transport
 func (s *FileServer) Start() error {
 	if err := s.Transport.ListenAndAccept(); err != nil {
 		return err
 	}
-	s.Loop()
+	s.bootstrapNetwork()
+	s.loop()
 	return nil
 }

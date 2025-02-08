@@ -2,37 +2,39 @@ package main
 
 import (
 	"log"
-	"time"
 
 	"github.com/muhreeowki/dfs/p2p"
 )
 
-func main() {
+func makeServer(listenAddr string, nodes ...string) *FileServer {
 	tcpOpts := p2p.TCPTransportOpts{
-		ListenAddr: ":3000",
+		ListenAddr: listenAddr,
 		ShakeHands: p2p.NOPHandshakeFunc,
 		Decoder:    p2p.NOPDecoder{},
 		OnPeer: func(p p2p.Peer) error {
-			log.Printf("doing some logic with peer outside of transport")
+			log.Printf("calling onPeer function...")
 			return nil
 		},
 	}
 	tcpTransport := p2p.NewTCPTransport(tcpOpts)
-
 	serverOpts := FileServerOpts{
 		Transport:         tcpTransport,
 		PathTransformFunc: CASPathTransformFunc,
-		StorageFolder:     "bobross",
+		StorageFolder:     listenAddr[1:] + "_network",
+		BootstrapNodes:    nodes,
 	}
+	return NewFileServer(serverOpts)
+}
 
-	server := NewFileServer(serverOpts)
+func main() {
+	s1 := makeServer(":3000")
+	s2 := makeServer(":4000", ":3000")
 
 	go func() {
-		time.Sleep(time.Second * 3)
-		server.Stop()
+		if err := s1.Start(); err != nil {
+			log.Fatal("s1 start error: ", err)
+		}
 	}()
 
-	if err := server.Start(); err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal("s2 start error: ", s2.Start())
 }
