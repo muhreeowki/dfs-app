@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -122,18 +121,17 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 	peer := NewTCPPeer(conn, outbound)
 	defer func() {
 		peer.Close()
-		log.Printf("Closed Connection %+v\n", peer)
+		log.Printf("TCPTransport Closed Connection %+v\n", peer)
 	}()
-	log.Printf("New Incomming Connection %+v\n", peer)
 	// Shake Hands with the peer connecting, (validate the connection)
 	if err := t.ShakeHands(peer); err != nil {
-		fmt.Errorf("TCP handshake error: %s\n", err)
+		log.Printf("TCPTransport handshake error: %s\n", err)
 		return
 	}
 	// Call OnPeer validation function
 	if t.OnPeer != nil {
 		if err := t.OnPeer(peer); err != nil {
-			log.Printf("TCP OnPeer error: %s\n", err)
+			log.Printf("TCPTransport OnPeer error: %s\n", err)
 			return
 		}
 	}
