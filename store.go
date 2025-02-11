@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 )
@@ -140,7 +139,6 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	if err != nil {
 		return n, err
 	}
-	log.Printf("Store written (%d) bytes to disk: %s", n, absPath)
 	return n, nil
 }
 
