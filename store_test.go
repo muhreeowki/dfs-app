@@ -17,7 +17,7 @@ func newStore() *Store {
 }
 func key() string  { return "john11" }
 func data() []byte { return []byte("jesuslovesmethisiknow") }
-func createTestData(s *Store) (int, error) {
+func createTestData(s *Store) (int64, error) {
 	n, err := s.writeStream(key(), bytes.NewReader(data()))
 	return n, err
 }

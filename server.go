@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -11,8 +12,17 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
+// Message is the primary struct for communication over
+// the network with other FileServer nodes.
 type Message struct {
 	Payload any
+}
+
+// MessageStoreFile is a Message Payload instuction to store a file in disk
+// recieved from the rpcch channel
+type MessageStoreFile struct {
+	Key  string
+	Size int64
 }
 
 // FileServerOpts is an options struct for FileServer
@@ -36,6 +46,7 @@ type FileServer struct {
 
 // NewFileServer returns a new FileServer struct
 func NewFileServer(opts FileServerOpts) *FileServer {
+	gob.Register(MessageStoreFile{})
 	return &FileServer{
 		FileServerOpts: opts,
 		store: NewStore(StoreOpts{
@@ -48,6 +59,46 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	}
 }
 
+// StoreData stores a file to disk and streams
+// the data to other file server nodes to do the same
+func (s *FileServer) StoreData(key string, r io.Reader) error {
+	// 1. Store the file to disk
+	buf := new(bytes.Buffer)
+	tee := io.TeeReader(r, buf)
+	size, err := s.store.Write(key, tee)
+	if err != nil {
+		return err
+	}
+	// 2. Broadcast the file to all known connected peers
+	// Send a MessageStoreFile message
+	msgBuf := new(bytes.Buffer)
+	msg := Message{
+		Payload: MessageStoreFile{
+			Key:  key,
+			Size: size,
+		},
+	}
+	if err := gob.NewEncoder(msgBuf).Encode(msg); err != nil {
+		return err
+	}
+	for _, peer := range s.peers {
+		if err := peer.Send(msgBuf.Bytes()); err != nil {
+			return err
+		}
+	}
+	// Stream the File
+	time.Sleep(time.Second * 3)
+	for _, peer := range s.peers {
+		n, err := io.Copy(peer, buf)
+		if err != nil {
+			return err
+		}
+		log.Println("recieved and written bytes: ", n)
+	}
+	//	return s.broadcast(msg)
+	return nil
+}
+
 // broadcast sends data to all known connected peers
 func (s *FileServer) broadcast(msg *Message) error {
 	peers := []io.Writer{}
@@ -56,53 +107,6 @@ func (s *FileServer) broadcast(msg *Message) error {
 	}
 	mw := io.MultiWriter(peers...)
 	return gob.NewEncoder(mw).Encode(msg)
-}
-
-func (s *FileServer) StoreData(key string, r io.Reader) error {
-	// 1. Store the file to disk
-	// 2. Broadcast the file to all known connected peers
-	buf := new(bytes.Buffer)
-	msg := Message{
-		Payload: []byte("loveGodwithallyourmind"),
-	}
-	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
-		return err
-	}
-
-	for _, peer := range s.peers {
-		if err := peer.Send(buf.Bytes()); err != nil {
-			return err
-		}
-	}
-
-	time.Sleep(time.Second * 3)
-
-	payload := []byte("THIS IS A SUPER ULTRA MASSIVE FILE!!!")
-	for _, peer := range s.peers {
-		if err := peer.Send(payload); err != nil {
-			return err
-		}
-	}
-
-	return nil
-
-	// buf := new(bytes.Buffer)
-	// tee := io.TeeReader(r, buf)
-	//
-	//	if _, err := s.store.Write(key, tee); err != nil {
-	//		return err
-	//	}
-	//
-	//	dataMsg := &DataMessage{
-	//		Key:  key,
-	//		Data: buf.Bytes(),
-	//	}
-	//
-	//
-	//	return s.broadcast(&Message{
-	//		From:    "muh",
-	//		Payload: dataMsg,
-	//	})
 }
 
 // loop is an accept loop that waits for communication over channels
@@ -119,27 +123,44 @@ func (s *FileServer) loop() {
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Printf("Decoder error: %+v\n", err)
 			}
-			log.Printf("recieved rpc msg: %s\n", msg.Payload.([]byte))
-
-			peer, ok := s.peers[rpc.From.String()]
-			if !ok {
-				panic("peer not found")
-			}
-			b := make([]byte, 2048)
-			if _, err := peer.Read(b); err != nil {
-				panic(err)
-			}
-			log.Printf("recieved data: %s\n", b)
-
-			peer.(*p2p.TCPPeer).Wg.Done()
+			s.handleMessage(rpc.From.String(), &msg)
+			// peer, ok := s.peers[rpc.From.String()]
+			// if !ok {
+			// 	panic("peer not found")
+			// }
+			// b := make([]byte, 2048)
+			// if _, err := peer.Read(b); err != nil {
+			// 	panic(err)
+			// }
+			// log.Printf("recieved data: %s\n", b)
+			// peer.(*p2p.TCPPeer).Wg.Done()
 		case <-s.quitch:
 			return
 		}
 	}
 }
 
-func (s *FileServer) handleMessage(msg *Message) error {
-	log.Printf("recieved data: %s\n", msg.Payload.([]byte))
+// handleMessage handles messages recieved over the rpcch channel from store.
+func (s *FileServer) handleMessage(from string, msg *Message) error {
+	switch msg.Payload.(type) {
+	case MessageStoreFile:
+		s.handleMessageStoreFile(from, msg.Payload.(MessageStoreFile))
+	}
+	return nil
+}
+
+// handleMessageStoreFile handles MessageStoreMessages by writing
+// the recieved file from the peer connection onto disk.
+func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) error {
+	peer, ok := s.peers[from]
+	if !ok {
+		return fmt.Errorf("peer (%s) was not found", from)
+	}
+	if _, err := s.store.Write(msg.Key, io.LimitReader(peer, msg.Size)); err != nil {
+		return err
+	}
+	log.Printf("%+v\n", msg)
+	peer.(*p2p.TCPPeer).Wg.Done()
 	return nil
 }
 

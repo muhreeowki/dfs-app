@@ -114,14 +114,14 @@ func (s *Store) readSteam(key string) (io.ReadCloser, error) {
 }
 
 // Write writes the data into the file refered to by the key
-func (s *Store) Write(key string, r io.Reader) (int, error) {
+func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
 // writeStream takes a key and an io.Reader
 // and writes its content to a file with a filename
 // derived from the key.
-func (s *Store) writeStream(key string, r io.Reader) (int, error) {
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 	// Hash the key
 	pathKey := s.TransFormPath(key)
 	// Create the Folders
@@ -138,10 +138,10 @@ func (s *Store) writeStream(key string, r io.Reader) (int, error) {
 	// Copy the data in r into the file
 	n, err := io.Copy(f, r)
 	if err != nil {
-		return int(n), err
+		return n, err
 	}
 	log.Printf("Store written (%d) bytes to disk: %s", n, absPath)
-	return int(n), nil
+	return n, nil
 }
 
 // Delete deletes the file refered to by the key
