@@ -37,18 +37,18 @@ func main() {
 	s3 := makeServer(":8000", ":3000", ":4000")
 
 	go s1.Start()
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Millisecond * 1)
 
 	go s2.Start()
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Millisecond * 1)
 
 	go s3.Start()
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Millisecond * 1)
 
 	for i := 0; i < 10; i++ {
 		data := bytes.NewReader([]byte(strconv.Itoa(i)))
 		s2.Store(strconv.Itoa(i), data, true)
-		time.Sleep(time.Millisecond * 5)
+		time.Sleep(time.Millisecond * 1)
 	}
 
 	select {}

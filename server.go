@@ -122,7 +122,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 		if err := s.broadcastMessage(msg); err != nil {
 			return err
 		}
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Millisecond * 5)
 		n, err := s.streamFile(fileBuf)
 		if err != nil {
 			return err
@@ -220,12 +220,14 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	if !ok {
 		return fmt.Errorf("peer (%s) was not found", from)
 	}
-	defer peer.(*p2p.TCPPeer).Wg.Done()
+	defer peer.CloseStream()
+
 	fileStream := io.LimitReader(peer, msg.Size)
 	n, err := s.store.Write(msg.Key, fileStream)
 	if err != nil {
 		return err
 	}
+
 	log.Printf("(%s): recieved file of size (%d) bytes from (%s)\n", s.StorageFolder, n, from)
 	return nil
 }
