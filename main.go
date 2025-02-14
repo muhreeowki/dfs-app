@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/muhreeowki/dfs/p2p"
@@ -34,39 +36,20 @@ func main() {
 	s2 := makeServer(":4000", ":3000")
 	s3 := makeServer(":8000", ":3000", ":4000")
 
-	go func() {
-		log.Fatal("S1 Failed: ", s1.Start())
-	}()
-
+	go s1.Start()
 	time.Sleep(time.Second * 3)
 
 	go s2.Start()
-
 	time.Sleep(time.Second * 3)
 
 	go s3.Start()
-
 	time.Sleep(time.Second * 3)
 
-	/*
-		data := bytes.NewReader([]byte("I can do all things through Christ who strengthens me."))
-		s2.Store("philpians4:13", data)
-
-		time.Sleep(time.Second * 10)
-
-		data = bytes.NewReader([]byte("for God So loved the world that he gave his only begoten son, that whosoever believes in him shall not perish but have everlasting file."))
-		s2.Store("john3:16", data)
-	*/
-	_, err := s2.Get("philpians4:13")
-	if err != nil {
-		log.Fatal(err)
+	for i := 0; i < 10; i++ {
+		data := bytes.NewReader([]byte(strconv.Itoa(i)))
+		s2.Store(strconv.Itoa(i), data, true)
+		time.Sleep(time.Millisecond * 5)
 	}
 
-	// b, err := io.ReadAll(r)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// log.Printf("file contents: %s", string(b))
 	select {}
 }

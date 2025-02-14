@@ -132,8 +132,8 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 		}
 	}
 	// Read loop
-	rpc := RPC{From: peer.Conn.RemoteAddr()}
 	for {
+		rpc := RPC{From: peer.Conn.RemoteAddr()}
 		if err := t.Decoder.Decode(peer.Conn, &rpc); err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 				return
@@ -141,11 +141,14 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 			log.Printf("TCP read error: %s\n", err)
 			continue
 		}
-		// log.Printf("TCPTransport recieved message: %s", rpc.Payload)
-		peer.Wg.Add(1)
-		log.Println("TCPTransport waiting till stream is done")
+		if rpc.Stream {
+			peer.Wg.Add(1)
+			log.Printf("Incoming stream from [ %s ], waiting till stream is done...", rpc.From.String())
+			peer.Wg.Wait()
+			log.Printf("Closed stream from [ %s ]. Resuming read loop...", rpc.From.String())
+			continue
+		}
+
 		t.rpcch <- rpc
-		peer.Wg.Wait()
-		log.Println("TCPTransport stream done. Continuing read loop")
 	}
 }
