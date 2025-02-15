@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
@@ -39,6 +38,7 @@ func CASPathTransformFunc(key, storageFolder string) *PathKey {
 	// Hash the key
 	hash := sha1.Sum([]byte(key))
 	hashStr := hex.EncodeToString(hash[:])
+
 	// Create the File path
 	blockSize := 8
 	sliceLen := len(hashStr) / blockSize
@@ -47,6 +47,7 @@ func CASPathTransformFunc(key, storageFolder string) *PathKey {
 		from, to := i*blockSize, (i*blockSize)+blockSize
 		paths[i] = hashStr[from:to]
 	}
+
 	return &PathKey{
 		Path:     fmt.Sprintf("%s/%s", storageFolder, strings.Join(paths, "/")),
 		Filename: hashStr,
@@ -73,9 +74,11 @@ func NewStore(opts StoreOpts) *Store {
 	if opts.PathTransformFunc == nil {
 		opts.PathTransformFunc = DefaultPathTransformFunc
 	}
+
 	if opts.StorageFolder == "" {
 		opts.StorageFolder = DefaultStorageFolder
 	}
+
 	return &Store{
 		StoreOpts: opts,
 	}
@@ -95,21 +98,26 @@ func (s *Store) Has(key string) bool {
 }
 
 // Read reads the data from the file into an io Reader
-func (s *Store) Read(key string) (io.Reader, error) {
-	f, err := s.readSteam(key)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, f)
-	return buf, err
+func (s *Store) Read(key string) (int64, io.Reader, error) {
+	return s.readSteam(key)
 }
 
 // readSteam returns the file refered to by the key
-func (s *Store) readSteam(key string) (io.ReadCloser, error) {
+// returns the file size, the file, and an error
+func (s *Store) readSteam(key string) (int64, io.ReadCloser, error) {
 	pathKey := s.TransFormPath(key)
-	return os.Open(pathKey.AbsPath())
+
+	file, err := os.Open(pathKey.AbsPath())
+	if err != nil {
+		return 0, nil, err
+	}
+
+	fi, err := file.Stat()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return fi.Size(), file, nil
 }
 
 // Write writes the data into the file refered to by the key
@@ -121,24 +129,24 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 // and writes its content to a file with a filename
 // derived from the key.
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
-	// Hash the key
-	pathKey := s.TransFormPath(key)
 	// Create the Folders
+	pathKey := s.TransFormPath(key)
 	if err := os.MkdirAll(pathKey.Path, os.ModePerm); err != nil {
 		return 0, err
 	}
-	// Copy data into buffer
-	absPath := pathKey.AbsPath()
+
 	// Open or Create the file
-	f, err := os.Create(absPath)
+	f, err := os.Create(pathKey.AbsPath())
 	if err != nil {
 		return 0, err
 	}
+
 	// Copy the data in r into the file
 	n, err := io.Copy(f, r)
 	if err != nil {
 		return n, err
 	}
+
 	return n, nil
 }
 

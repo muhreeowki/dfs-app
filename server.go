@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -19,19 +20,19 @@ type Message struct {
 }
 
 // MessageStoreFile is a Message Payload instuction to store
-// a file in disk that is recieved from the rpcch channel
+// a file in disk that is recieved from the rpcch channel.
 type MessageStoreFile struct {
 	Key  string
 	Size int64
 }
 
 // MessageGetFile is a Message Payload instuction to get
-// a file from disk that is recieved from the rpcch channel
+// a file from disk that is recieved from the rpcch channel.
 type MessageGetFile struct {
 	Key string
 }
 
-// FileServerOpts is an options struct for FileServer
+// FileServerOpts is an options struct for FileServer.
 type FileServerOpts struct {
 	Transport         p2p.Transport
 	StorageFolder     string
@@ -39,7 +40,7 @@ type FileServerOpts struct {
 	BootstrapNodes    []string
 }
 
-// FileServer is a server that performs file actions on a Store
+// FileServer is a server that performs file actions on a Store.
 type FileServer struct {
 	FileServerOpts
 
@@ -50,10 +51,12 @@ type FileServer struct {
 	quitch chan struct{}
 }
 
-// NewFileServer returns a new FileServer struct
+// NewFileServer returns a new FileServer struct.
 func NewFileServer(opts FileServerOpts) *FileServer {
+	// Register gob encoding types
 	gob.Register(MessageStoreFile{})
 	gob.Register(MessageGetFile{})
+
 	return &FileServer{
 		FileServerOpts: opts,
 		store: NewStore(StoreOpts{
@@ -66,10 +69,12 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	}
 }
 
-// Get retrieves a file that is on the local disk
+// Get retrieves a file that is on the local disk.
 func (s *FileServer) Get(key string) (io.Reader, error) {
 	if s.store.Has(key) {
-		return s.store.Read(key)
+		log.Printf("(%s): serving file (%s) from local disk", s.StorageFolder, key)
+		_, r, err := s.store.Read(key)
+		return r, err
 	}
 
 	log.Printf("(%s): file (%s) not found on local disk, searching network", s.StorageFolder, key)
@@ -84,21 +89,34 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		return nil, err
 	}
 
+	time.Sleep(time.Millisecond * 500)
+
 	for _, peer := range s.peers {
-		fileBuffer := new(bytes.Buffer)
-		n, err := io.Copy(fileBuffer, peer)
+		var size int64
+		err := binary.Read(peer, binary.LittleEndian, &size)
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("(%s): recieved (%d) bytes over the network.", s.StorageFolder, n)
-		log.Printf(fileBuffer.String())
-	}
 
-	select {}
+		n, err := s.store.Write(key, io.LimitReader(peer, size))
+		if err != nil {
+			return nil, err
+		}
+
+		log.Printf(
+			"(%s): recieved (%d) bytes over the network from (%s).",
+			s.StorageFolder,
+			n,
+			peer.RemoteAddr().String(),
+		)
+		peer.CloseStream()
+	}
+	_, r, err := s.store.Read(key)
+	return r, err
 }
 
 // Store stores a file to disk and streams
-// the data to other file server nodes to do the same
+// the data to other file server nodes to do the same.
 func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	// 1. Store the file to disk
 	var (
@@ -111,7 +129,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	}
 	log.Printf("(%s): stored file (%s) to disk locally\n", s.StorageFolder, key)
 
-	// Stream the File
+	// Stream the File.
 	if stream {
 		msg := &Message{
 			Payload: MessageStoreFile{
@@ -122,6 +140,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 		if err := s.broadcastMessage(msg); err != nil {
 			return err
 		}
+
 		time.Sleep(time.Millisecond * 5)
 		n, err := s.streamFile(fileBuf)
 		if err != nil {
@@ -132,7 +151,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	return nil
 }
 
-// streamFile sends a file to all known connected peers
+// streamFile sends a file to all known connected peers.
 func (s *FileServer) streamFile(r io.Reader) (int64, error) {
 	peers := []io.Writer{}
 	for _, peer := range s.peers {
@@ -160,7 +179,7 @@ func (s *FileServer) broadcastMessage(msg *Message) error {
 }
 
 // loop is an accept loop that waits for communication over channels
-// and performs some logic with it
+// and performs some logic with it.
 func (s *FileServer) loop() {
 	defer func() {
 		log.Println("FileServer stopping due to user quit action.")
@@ -194,6 +213,7 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 		if err := s.handleMessageStoreFile(from, msg.Payload.(MessageStoreFile)); err != nil {
 			return err
 		}
+
 	case MessageGetFile:
 		log.Printf("(%s): get file message request form (%s) for file (%s)\n",
 			s.StorageFolder,
@@ -203,6 +223,7 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 		if err := s.handleMessageGetFile(from, msg.Payload.(MessageGetFile)); err != nil {
 			return err
 		}
+
 	default:
 		log.Printf("(%s): recieved strange message request form (%s)\n",
 			s.StorageFolder,
@@ -232,30 +253,46 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	return nil
 }
 
-// handleMessageGetFile handles MessageGetFile messages
+// handleMessageGetFile handles MessageGetFile messages.
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
 	if !s.store.Has(msg.Key) {
 		return fmt.Errorf("(%s): file (%s) not found \n", s.StorageFolder, msg.Key)
 	}
+
 	peer, ok := s.peers[from]
 	if !ok {
 		return fmt.Errorf("(%s): peer (%s) not found \n", s.StorageFolder, from)
 	}
 
-	r, err := s.store.Read(msg.Key)
+	size, r, err := s.store.Read(msg.Key)
 	if err != nil {
 		return err
 	}
+
+	if rc, ok := r.(io.ReadCloser); ok {
+		log.Println("closing file.")
+		defer rc.Close()
+	}
+
+	peer.Send([]byte{p2p.IncomingStream})
+	binary.Write(peer, binary.LittleEndian, size)
 
 	n, err := io.Copy(peer, r)
 	if err != nil {
 		return err
 	}
-	log.Printf("(%s): streamed file (%s) of size (%d) bytes to (%s)\n", s.StorageFolder, msg.Key, n, from)
+
+	log.Printf(
+		"(%s): streamed file (%s) of size (%d) bytes to (%s)\n",
+		s.StorageFolder,
+		msg.Key,
+		n,
+		from,
+	)
 	return nil
 }
 
-// bootstrapNetwork connects to a list of nodes
+// bootstrapNetwork connects to a list of nodes.
 func (s *FileServer) bootstrapNetwork() error {
 	for _, addr := range s.BootstrapNodes {
 		if len(addr) == 0 {
@@ -269,10 +306,11 @@ func (s *FileServer) bootstrapNetwork() error {
 			}
 		}()
 	}
+
 	return nil
 }
 
-// Start starts the FileServer and it listens through the provided Transport
+// Start starts the FileServer and it listens through the provided Transport.
 func (s *FileServer) Start() error {
 	if err := s.Transport.ListenAndAccept(); err != nil {
 		return err
@@ -282,12 +320,12 @@ func (s *FileServer) Start() error {
 	return nil
 }
 
-// Stop close all the channels
+// Stop close all the channels.
 func (s *FileServer) Stop() {
 	close(s.quitch)
 }
 
-// OnPeer is a function that handles a peer connection
+// OnPeer is a function that handles a peer connection.
 func (s *FileServer) OnPeer(p p2p.Peer) error {
 	s.peerLock.Lock()
 	defer s.peerLock.Unlock()

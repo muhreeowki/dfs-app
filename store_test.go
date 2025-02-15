@@ -47,8 +47,7 @@ func TestStoreRead(t *testing.T) {
 	defer teardown(t, s)
 	// Create Data
 	createTestData(s)
-	// Test Reading
-	r, err := s.Read(key())
+	_, r, err := s.Read(key())
 	if err != nil {
 		t.Fatal(err)
 	}
