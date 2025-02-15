@@ -19,9 +19,13 @@ func TestCopyEncryptDycrypt(t *testing.T) {
 	}
 
 	out := new(bytes.Buffer)
-	_, err = copyDecrypt(key, dst, out)
+	n, err := copyDecrypt(key, dst, out)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if n != 16+len(data) {
+		t.Fatal("Invalid length!")
 	}
 
 	assert.EqualValues(t, string(data), out.String(), "Decrption failed!")

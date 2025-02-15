@@ -34,6 +34,7 @@ type MessageGetFile struct {
 
 // FileServerOpts is an options struct for FileServer.
 type FileServerOpts struct {
+	Enkey             []byte
 	Transport         p2p.Transport
 	StorageFolder     string
 	PathTransformFunc PathTransformFunc
@@ -134,7 +135,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 		msg := &Message{
 			Payload: MessageStoreFile{
 				Key:  key,
-				Size: size,
+				Size: size + 16,
 			},
 		}
 		if err := s.broadcastMessage(msg); err != nil {
@@ -152,14 +153,14 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 }
 
 // streamFile sends a file to all known connected peers.
-func (s *FileServer) streamFile(r io.Reader) (int64, error) {
+func (s *FileServer) streamFile(file io.Reader) (int, error) {
 	peers := []io.Writer{}
 	for _, peer := range s.peers {
 		peer.Send([]byte{p2p.IncomingStream})
 		peers = append(peers, peer)
 	}
 	mw := io.MultiWriter(peers...)
-	n, err := io.Copy(mw, r)
+	n, err := copyEncrypt(s.Enkey, file, mw)
 	return n, err
 }
 
