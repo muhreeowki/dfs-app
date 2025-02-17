@@ -87,6 +87,12 @@ func (t *TCPTransport) Dail(addr string) error {
 	return nil
 }
 
+// Addr implements the Transport interface.
+// It returns the listening address.
+func (t *TCPTransport) Addr() string {
+	return t.listener.Addr().String()
+}
+
 // ListenAndAccept listens on the listenAddr for connections,
 // accepts communication from remote nodes.
 func (t *TCPTransport) ListenAndAccept() (err error) {

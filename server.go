@@ -13,6 +13,12 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
+// TODO:
+// 1. Add and Implement Automatic Peer Discovery
+// 2. Add and Implement Remove function
+// 3. Figure out Syncing
+// 3. Figure out Consensus Algorithms
+
 // Message is the primary struct for communication over
 // the network with other FileServer nodes.
 type Message struct {
@@ -283,7 +289,6 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 	if err != nil {
 		return err
 	}
-
 	log.Printf(
 		"(%s): streamed file (%s) of size (%d) bytes to (%s)\n",
 		s.StorageFolder,
@@ -301,14 +306,12 @@ func (s *FileServer) bootstrapNetwork() error {
 			continue
 		}
 		go func() {
+			log.Printf("[%s]: Attempting to connect to: %s", s.Transport.Addr(), addr)
 			if err := s.Transport.Dail(addr); err != nil {
 				log.Printf("Failed to connect to %v: %v\n", addr, err)
-			} else {
-				log.Println("Connected to: ", addr)
 			}
 		}()
 	}
-
 	return nil
 }
 
@@ -332,6 +335,6 @@ func (s *FileServer) OnPeer(p p2p.Peer) error {
 	s.peerLock.Lock()
 	defer s.peerLock.Unlock()
 	s.peers[p.RemoteAddr().String()] = p
-	log.Printf("connected with peer: %s", p.RemoteAddr())
+	log.Printf("[%s]: Connection successfully established with peer: %s", s.Transport.Addr(), p.RemoteAddr())
 	return nil
 }
