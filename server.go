@@ -28,6 +28,7 @@ type Message struct {
 // MessageStoreFile is a Message Payload instuction to store
 // a file in disk that is recieved from the rpcch channel.
 type MessageStoreFile struct {
+	ID   string
 	Key  string
 	Size int64
 }
@@ -35,11 +36,13 @@ type MessageStoreFile struct {
 // MessageGetFile is a Message Payload instuction to get
 // a file from disk that is recieved from the rpcch channel.
 type MessageGetFile struct {
+	ID  string
 	Key string
 }
 
 // FileServerOpts is an options struct for FileServer.
 type FileServerOpts struct {
+	ID                string
 	Enkey             []byte
 	Transport         p2p.Transport
 	StorageFolder     string
@@ -63,7 +66,9 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	// Register gob encoding types
 	gob.Register(MessageStoreFile{})
 	gob.Register(MessageGetFile{})
-
+	if len(opts.ID) == 0 {
+		opts.ID = generateID()
+	}
 	return &FileServer{
 		FileServerOpts: opts,
 		store: NewStore(StoreOpts{
@@ -78,9 +83,9 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 
 // Get retrieves a file that is on the local disk.
 func (s *FileServer) Get(key string) (io.Reader, error) {
-	if s.store.Has(key) {
+	if s.store.Has(s.ID, key) {
 		log.Printf("(%s): serving file (%s) from local disk", s.StorageFolder, key)
-		_, r, err := s.store.Read(key)
+		_, r, err := s.store.Read(s.ID, key)
 		return r, err
 	}
 
@@ -88,7 +93,8 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 
 	msg := &Message{
 		Payload: MessageGetFile{
-			Key: key,
+			ID:  s.ID,
+			Key: hashKey(key),
 		},
 	}
 
@@ -105,7 +111,12 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 			return nil, err
 		}
 
-		n, err := s.store.WriteDecrypt(s.Enkey, key, io.LimitReader(peer, size))
+		n, err := s.store.WriteDecrypt(
+			s.Enkey,
+			s.ID,
+			key,
+			io.LimitReader(peer, size),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +129,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		)
 		peer.CloseStream()
 	}
-	_, r, err := s.store.Read(key)
+	_, r, err := s.store.Read(s.ID, key)
 	return r, err
 }
 
@@ -130,7 +141,7 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 		fileBuf = new(bytes.Buffer)
 		tee     = io.TeeReader(r, fileBuf)
 	)
-	size, err := s.store.Write(key, tee)
+	size, err := s.store.Write(s.ID, key, tee)
 	if err != nil {
 		return err
 	}
@@ -140,7 +151,8 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	if stream {
 		msg := &Message{
 			Payload: MessageStoreFile{
-				Key:  key,
+				ID:   s.ID,
+				Key:  hashKey(key),
 				Size: size + 16,
 			},
 		}
@@ -167,8 +179,7 @@ func (s *FileServer) streamFile(file io.Reader) (int64, error) {
 	mw := io.MultiWriter(peers...)
 	mw.Write([]byte{p2p.IncomingStream})
 	// Stream the encrypted file.
-	n, err := copyEncrypt(s.Enkey, file, mw)
-	return n, err
+	return copyEncrypt(s.Enkey, file, mw)
 }
 
 // broadcastMessage sends a message to all known connected peers
@@ -252,7 +263,7 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	defer peer.CloseStream()
 
 	fileStream := io.LimitReader(peer, msg.Size)
-	n, err := s.store.Write(msg.Key, fileStream)
+	n, err := s.store.Write(msg.ID, msg.Key, fileStream)
 	if err != nil {
 		return err
 	}
@@ -263,7 +274,7 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 
 // handleMessageGetFile handles MessageGetFile messages.
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
-	if !s.store.Has(msg.Key) {
+	if !s.store.Has(msg.ID, msg.Key) {
 		return fmt.Errorf("(%s): file (%s) not found \n", s.StorageFolder, msg.Key)
 	}
 
@@ -272,7 +283,7 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 		return fmt.Errorf("(%s): peer (%s) not found \n", s.StorageFolder, from)
 	}
 
-	size, r, err := s.store.Read(msg.Key)
+	size, r, err := s.store.Read(msg.ID, msg.Key)
 	if err != nil {
 		return err
 	}

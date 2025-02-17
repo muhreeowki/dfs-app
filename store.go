@@ -22,24 +22,22 @@ func (pk *PathKey) AbsPath() string {
 }
 
 // PathTransformFunc is a function that transforms a key into a filepath by hashing it
-type PathTransformFunc func(key, storageFolder string) *PathKey
+type PathTransformFunc func(id, key, storageFolder string) *PathKey
 
 // DefaultPathTransformFunc is a basic PathTransformFunc
-var DefaultPathTransformFunc = func(key, storageFolder string) *PathKey {
+var DefaultPathTransformFunc = func(id, key, storageFolder string) *PathKey {
 	return &PathKey{
-		Path:     fmt.Sprintf("%s/%s", storageFolder, key),
+		Path:     fmt.Sprintf("%s/%s/%s", storageFolder, id, key),
 		Filename: key,
 	}
 }
 
 // CASPathTransformFunc is a PathTransformFunc that takes a key and returns a PathKey
-// with a pathname and filename derived from the hashed key
-func CASPathTransformFunc(key, storageFolder string) *PathKey {
-	// Hash the key
+// with a pathname and filename derived from the hashed key.
+// This is used for a Content addressable file store.
+func CASPathTransformFunc(id, key, storageFolder string) *PathKey {
 	hash := sha1.Sum([]byte(key))
 	hashStr := hex.EncodeToString(hash[:])
-
-	// Create the File path
 	blockSize := 8
 	sliceLen := len(hashStr) / blockSize
 	paths := make([]string, sliceLen)
@@ -49,9 +47,9 @@ func CASPathTransformFunc(key, storageFolder string) *PathKey {
 	}
 
 	return &PathKey{
-		Path:     fmt.Sprintf("%s/%s", storageFolder, strings.Join(paths, "/")),
+		Path:     fmt.Sprintf("%s/%s/%s", storageFolder, id, strings.Join(paths, "/")),
 		Filename: hashStr,
-		Root:     fmt.Sprintf("%s/%s", storageFolder, paths[0]),
+		Root:     fmt.Sprintf("%s/%s/%s", storageFolder, id, paths[0]),
 	}
 }
 
@@ -83,27 +81,27 @@ func NewStore(opts StoreOpts) *Store {
 }
 
 // TransFormPath injects the storage folder name into the PathTransformFunc
-func (s *Store) TransFormPath(key string) *PathKey {
-	return s.PathTransformFunc(key, s.StorageFolder)
+func (s *Store) TransFormPath(id, key string) *PathKey {
+	return s.PathTransformFunc(id, key, s.StorageFolder)
 }
 
 // Has returns true if a file exists at the provided
 // key otherwise it returns false
-func (s *Store) Has(key string) bool {
-	pathKey := s.TransFormPath(key)
+func (s *Store) Has(id, key string) bool {
+	pathKey := s.TransFormPath(id, key)
 	_, err := os.Stat(pathKey.AbsPath())
 	return !(err != nil && os.IsNotExist(err))
 }
 
 // Read reads the data from the file into an io Reader
-func (s *Store) Read(key string) (int64, io.Reader, error) {
-	return s.readSteam(key)
+func (s *Store) Read(id, key string) (int64, io.Reader, error) {
+	return s.readSteam(id, key)
 }
 
 // readSteam returns the file refered to by the key
 // returns the file size, the file, and an error
-func (s *Store) readSteam(key string) (int64, io.ReadCloser, error) {
-	pathKey := s.TransFormPath(key)
+func (s *Store) readSteam(id, key string) (int64, io.ReadCloser, error) {
+	pathKey := s.TransFormPath(id, key)
 	file, err := os.Open(pathKey.AbsPath())
 	if err != nil {
 		return 0, nil, err
@@ -116,14 +114,14 @@ func (s *Store) readSteam(key string) (int64, io.ReadCloser, error) {
 }
 
 // Write writes the data into the file refered to by the key
-func (s *Store) Write(key string, r io.Reader) (int64, error) {
-	return s.writeStream(key, r)
+func (s *Store) Write(id, key string, r io.Reader) (int64, error) {
+	return s.writeStream(id, key, r)
 }
 
 // openWriteFile creates a new file using the provided key and returns it
-func (s *Store) openWriteFile(key string) (*os.File, error) {
+func (s *Store) openWriteFile(id, key string) (*os.File, error) {
 	// Create the Folders
-	pathKey := s.TransFormPath(key)
+	pathKey := s.TransFormPath(id, key)
 	if err := os.MkdirAll(pathKey.Path, os.ModePerm); err != nil {
 		return nil, err
 	}
@@ -134,8 +132,8 @@ func (s *Store) openWriteFile(key string) (*os.File, error) {
 // WriteDecrypt takes a key and an io.Reader
 // with encrypted content, decrypts the content, and writes
 // the content to a file.
-func (s *Store) WriteDecrypt(encKey []byte, key string, r io.Reader) (int64, error) {
-	f, err := s.openWriteFile(key)
+func (s *Store) WriteDecrypt(encKey []byte, id, key string, r io.Reader) (int64, error) {
+	f, err := s.openWriteFile(id, key)
 	if err != nil {
 		return 0, err
 	}
@@ -145,8 +143,8 @@ func (s *Store) WriteDecrypt(encKey []byte, key string, r io.Reader) (int64, err
 // writeStream takes a key and an io.Reader
 // and writes its content to a file with a filename
 // derived from the key.
-func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
-	f, err := s.openWriteFile(key)
+func (s *Store) writeStream(id, key string, r io.Reader) (int64, error) {
+	f, err := s.openWriteFile(id, key)
 	if err != nil {
 		return 0, err
 	}
@@ -154,8 +152,8 @@ func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
 }
 
 // Delete deletes the file refered to by the key
-func (s *Store) Delete(key string) error {
-	pathKey := s.TransFormPath(key)
+func (s *Store) Delete(id, key string) error {
+	pathKey := s.TransFormPath(id, key)
 	return os.RemoveAll(pathKey.Root)
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
-func makeServer(listenAddr string, nodes ...string) *FileServer {
+func makeServer(id, listenAddr string, nodes ...string) *FileServer {
 	tcpOpts := p2p.TCPTransportOpts{
 		ListenAddr: listenAddr,
 		ShakeHands: p2p.NOPHandshakeFunc,
@@ -34,9 +34,9 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 }
 
 func main() {
-	s1 := makeServer(":3000")
-	s2 := makeServer(":4000", ":3000")
-	s3 := makeServer(":8000", ":3000", ":4000")
+	s1 := makeServer("store1", ":3000")
+	s2 := makeServer("store2", ":4000", ":3000")
+	s3 := makeServer("store3", ":8000", ":3000", ":4000")
 
 	go s1.Start()
 	time.Sleep(time.Millisecond * 1)
@@ -47,16 +47,37 @@ func main() {
 	go s3.Start()
 	time.Sleep(time.Millisecond * 1)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 10; i++ {
 		key := "christian" + strconv.Itoa(i)
-		data := bytes.NewReader([]byte(key + "\nI can do all things through Christ who strengthens me."))
+		data := bytes.NewReader([]byte(key + ":\tI can do all things through Christ who strengthens me."))
 		if err := s2.Store(key, data, true); err != nil {
 			log.Fatal(err)
 		}
-		if err := s2.store.Delete(key); err != nil {
+		if err := s2.store.Delete(s2.ID, key); err != nil {
 			log.Fatal(err)
 		}
 		r, err := s2.Get(key)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		b, err := io.ReadAll(r)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("File contents for file (%s): %s", key, b)
+	}
+
+	for i := 10; i < 20; i++ {
+		key := "christian" + strconv.Itoa(i)
+		data := bytes.NewReader([]byte(key + ":\tI can do all things through Christ who strengthens me."))
+		if err := s1.Store(key, data, true); err != nil {
+			log.Fatal(err)
+		}
+		if err := s1.store.Delete(s1.ID, key); err != nil {
+			log.Fatal(err)
+		}
+		r, err := s1.Get(key)
 		if err != nil {
 			log.Fatal(err)
 		}
