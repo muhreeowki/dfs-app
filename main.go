@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/muhreeowki/dfs/p2p"
@@ -45,21 +47,24 @@ func main() {
 	go s3.Start()
 	time.Sleep(time.Millisecond * 1)
 
-	data := bytes.NewReader([]byte("I can do all things through Christ who strengthens me."))
-	s2.Store("philpians4:13", data, true)
-	// time.Sleep(time.Millisecond * 1)
+	for i := 0; i < 20; i++ {
+		key := "christian" + strconv.Itoa(i)
+		data := bytes.NewReader([]byte(key + "\nI can do all things through Christ who strengthens me."))
+		if err := s2.Store(key, data, true); err != nil {
+			log.Fatal(err)
+		}
+		if err := s2.store.Delete(key); err != nil {
+			log.Fatal(err)
+		}
+		r, err := s2.Get(key)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	// data = bytes.NewReader([]byte("for God So loved the world that he gave his only begoten son, that whosoever believes in him shall not perish but have everlasting file."))
-	// s2.Store("john3:16", data, true)
-
-	// r, err := s2.Get("philpians4:13")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// b, err := io.ReadAll(r)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// log.Println("Found file (philpians4:13) on network.")
-	// log.Printf("File contents: (%s)\n", b)
+		b, err := io.ReadAll(r)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("File contents for file (%s): %s", key, b)
+	}
 }

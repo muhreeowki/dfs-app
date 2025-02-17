@@ -15,7 +15,7 @@ func newEncryptionKey() []byte {
 }
 
 // copyEncrypt encrypts the contents of src and copies the result into the dst
-func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
+func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int64, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return 0, err
@@ -33,7 +33,7 @@ func copyEncrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 }
 
 // copyDecrypt decryts the contents of src and copies the result into the dst
-func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
+func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int64, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return 0, err
@@ -48,7 +48,7 @@ func copyDecrypt(key []byte, src io.Reader, dst io.Writer) (int, error) {
 
 // writeCryptStream handles encpypting/decrypting data from src to dst,
 // if src is encpyped data, it decryts, if src is decrypted data, it encrypts.
-func writeCryptStream(src io.Reader, dst io.Writer, block cipher.Block, iv []byte) (int, error) {
+func writeCryptStream(src io.Reader, dst io.Writer, block cipher.Block, iv []byte) (int64, error) {
 	var (
 		buf    = make([]byte, 32*1024)
 		stream = cipher.NewCTR(block, iv)
@@ -71,5 +71,5 @@ func writeCryptStream(src io.Reader, dst io.Writer, block cipher.Block, iv []byt
 			return 0, nil
 		}
 	}
-	return nw, nil
+	return int64(nw), nil
 }

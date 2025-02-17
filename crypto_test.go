@@ -24,7 +24,7 @@ func TestCopyEncryptDycrypt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n != 16+len(data) {
+	if n != int64(16+len(data)) {
 		t.Fatal("Invalid length!")
 	}
 

@@ -74,11 +74,9 @@ func NewStore(opts StoreOpts) *Store {
 	if opts.PathTransformFunc == nil {
 		opts.PathTransformFunc = DefaultPathTransformFunc
 	}
-
 	if opts.StorageFolder == "" {
 		opts.StorageFolder = DefaultStorageFolder
 	}
-
 	return &Store{
 		StoreOpts: opts,
 	}
@@ -106,17 +104,14 @@ func (s *Store) Read(key string) (int64, io.Reader, error) {
 // returns the file size, the file, and an error
 func (s *Store) readSteam(key string) (int64, io.ReadCloser, error) {
 	pathKey := s.TransFormPath(key)
-
 	file, err := os.Open(pathKey.AbsPath())
 	if err != nil {
 		return 0, nil, err
 	}
-
 	fi, err := file.Stat()
 	if err != nil {
 		return 0, nil, err
 	}
-
 	return fi.Size(), file, nil
 }
 
@@ -125,29 +120,37 @@ func (s *Store) Write(key string, r io.Reader) (int64, error) {
 	return s.writeStream(key, r)
 }
 
+// openWriteFile creates a new file using the provided key and returns it
+func (s *Store) openWriteFile(key string) (*os.File, error) {
+	// Create the Folders
+	pathKey := s.TransFormPath(key)
+	if err := os.MkdirAll(pathKey.Path, os.ModePerm); err != nil {
+		return nil, err
+	}
+	// Open or Create the file
+	return os.Create(pathKey.AbsPath())
+}
+
+// WriteDecrypt takes a key and an io.Reader
+// with encrypted content, decrypts the content, and writes
+// the content to a file.
+func (s *Store) WriteDecrypt(encKey []byte, key string, r io.Reader) (int64, error) {
+	f, err := s.openWriteFile(key)
+	if err != nil {
+		return 0, err
+	}
+	return copyDecrypt(encKey, r, f)
+}
+
 // writeStream takes a key and an io.Reader
 // and writes its content to a file with a filename
 // derived from the key.
 func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
-	// Create the Folders
-	pathKey := s.TransFormPath(key)
-	if err := os.MkdirAll(pathKey.Path, os.ModePerm); err != nil {
-		return 0, err
-	}
-
-	// Open or Create the file
-	f, err := os.Create(pathKey.AbsPath())
+	f, err := s.openWriteFile(key)
 	if err != nil {
 		return 0, err
 	}
-
-	// Copy the data in r into the file
-	n, err := io.Copy(f, r)
-	if err != nil {
-		return n, err
-	}
-
-	return n, nil
+	return io.Copy(f, r)
 }
 
 // Delete deletes the file refered to by the key

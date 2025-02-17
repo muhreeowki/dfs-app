@@ -99,7 +99,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 			return nil, err
 		}
 
-		n, err := s.store.Write(key, io.LimitReader(peer, size))
+		n, err := s.store.WriteDecrypt(s.Enkey, key, io.LimitReader(peer, size))
 		if err != nil {
 			return nil, err
 		}
@@ -153,13 +153,14 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 }
 
 // streamFile sends a file to all known connected peers.
-func (s *FileServer) streamFile(file io.Reader) (int, error) {
+func (s *FileServer) streamFile(file io.Reader) (int64, error) {
 	peers := []io.Writer{}
 	for _, peer := range s.peers {
-		peer.Send([]byte{p2p.IncomingStream})
 		peers = append(peers, peer)
 	}
 	mw := io.MultiWriter(peers...)
+	mw.Write([]byte{p2p.IncomingStream})
+	// Stream the encrypted file.
 	n, err := copyEncrypt(s.Enkey, file, mw)
 	return n, err
 }
