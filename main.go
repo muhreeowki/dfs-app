@@ -10,28 +10,11 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
-func makeServer(id, listenAddr string, nodes ...string) *FileServer {
-	tcpOpts := p2p.TCPTransportOpts{
-		ListenAddr: listenAddr,
-		ShakeHands: p2p.NOPHandshakeFunc,
-		Decoder:    p2p.NOPDecoder{},
-		OnPeer: func(p p2p.Peer) error {
-			log.Printf("calling onPeer function...")
-			return nil
-		},
-	}
-	tcpTransport := p2p.NewTCPTransport(tcpOpts)
-	serverOpts := FileServerOpts{
-		Enkey:             newEncryptionKey(),
-		Transport:         tcpTransport,
-		PathTransformFunc: CASPathTransformFunc,
-		StorageFolder:     listenAddr[1:] + "_network",
-		BootstrapNodes:    nodes,
-	}
-	s := NewFileServer(serverOpts)
-	tcpTransport.OnPeer = s.OnPeer
-	return s
-}
+// TODO:
+// 1. Add and Implement Automatic Peer Discovery
+// 2. Add and Implement Remove function
+// 3. Implement File Syncing
+// 4. Implement a Consensus Algorithm
 
 func main() {
 	s1 := makeServer("store1", ":3000")
@@ -47,7 +30,7 @@ func main() {
 	go s3.Start()
 	time.Sleep(time.Millisecond * 1)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := "christian" + strconv.Itoa(i)
 		data := bytes.NewReader([]byte(key + ":\tI can do all things through Christ who strengthens me."))
 		if err := s2.Store(key, data, true); err != nil {
@@ -88,4 +71,28 @@ func main() {
 		}
 		log.Printf("File contents for file (%s): %s", key, b)
 	}
+}
+
+func makeServer(id, listenAddr string, nodes ...string) *FileServer {
+	tcpOpts := p2p.TCPTransportOpts{
+		ListenAddr: listenAddr,
+		ShakeHands: p2p.NOPHandshakeFunc,
+		Decoder:    p2p.NOPDecoder{},
+		OnPeer: func(p p2p.Peer) error {
+			log.Printf("calling onPeer function...")
+			return nil
+		},
+	}
+	tcpTransport := p2p.NewTCPTransport(tcpOpts)
+	serverOpts := FileServerOpts{
+		ID:                id,
+		Enkey:             newEncryptionKey(),
+		Transport:         tcpTransport,
+		PathTransformFunc: CASPathTransformFunc,
+		StorageFolder:     listenAddr[1:] + "_network",
+		BootstrapNodes:    nodes,
+	}
+	s := NewFileServer(serverOpts)
+	tcpTransport.OnPeer = s.OnPeer
+	return s
 }

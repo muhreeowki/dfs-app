@@ -13,12 +13,6 @@ import (
 	"github.com/muhreeowki/dfs/p2p"
 )
 
-// TODO:
-// 1. Add and Implement Automatic Peer Discovery
-// 2. Add and Implement Remove function
-// 3. Figure out Syncing
-// 3. Figure out Consensus Algorithms
-
 // Message is the primary struct for communication over
 // the network with other FileServer nodes.
 type Message struct {
