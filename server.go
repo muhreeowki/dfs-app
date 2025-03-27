@@ -19,25 +19,32 @@ type Message struct {
 	Payload any
 }
 
-// MessageStoreFile is a Message Payload instuction to store
+// StoreFileInstruction is a Message Payload instuction to store
 // a file in disk that is recieved from the rpcch channel.
-type MessageStoreFile struct {
-	ID   string
-	Key  string
-	Size int64
+type StoreFileInstruction struct {
+	ServerID string
+	FileKey  string
+	Size     int64
 }
 
-// MessageGetFile is a Message Payload instuction to get
+// GetFileInstruction is a Message Payload instuction to get
 // a file from disk that is recieved from the rpcch channel.
-type MessageGetFile struct {
-	ID  string
-	Key string
+type GetFileInstruction struct {
+	ServerID string
+	FileKey  string
+}
+
+// DeleteFileInstruction is a Message Payload instuction to delete
+// a file from disk that is recieved from the rpcch channel.
+type DeleteFileInstruction struct {
+	ServerID string
+	FileKey  string
 }
 
 // FileServerOpts is an options struct for FileServer.
 type FileServerOpts struct {
 	ID                string
-	Enkey             []byte
+	Encryptionkey     []byte
 	Transport         p2p.Transport
 	StorageFolder     string
 	PathTransformFunc PathTransformFunc
@@ -58,8 +65,9 @@ type FileServer struct {
 // NewFileServer returns a new FileServer struct.
 func NewFileServer(opts FileServerOpts) *FileServer {
 	// Register gob encoding types
-	gob.Register(MessageStoreFile{})
-	gob.Register(MessageGetFile{})
+	gob.Register(StoreFileInstruction{})
+	gob.Register(GetFileInstruction{})
+	gob.Register(DeleteFileInstruction{})
 	if len(opts.ID) == 0 {
 		opts.ID = generateID()
 	}
@@ -86,9 +94,9 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 	log.Printf("(%s): file (%s) not found on local disk, searching network", s.StorageFolder, key)
 
 	msg := &Message{
-		Payload: MessageGetFile{
-			ID:  s.ID,
-			Key: hashKey(key),
+		Payload: GetFileInstruction{
+			ServerID: s.ID,
+			FileKey:  hashKey(key),
 		},
 	}
 
@@ -96,7 +104,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		return nil, err
 	}
 
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 100)
 
 	for _, peer := range s.peers {
 		var size int64
@@ -106,7 +114,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		}
 
 		n, err := s.store.WriteDecrypt(
-			s.Enkey,
+			s.Encryptionkey,
 			s.ID,
 			key,
 			io.LimitReader(peer, size),
@@ -144,10 +152,10 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	// Stream the File.
 	if stream {
 		msg := &Message{
-			Payload: MessageStoreFile{
-				ID:   s.ID,
-				Key:  hashKey(key),
-				Size: size + 16,
+			Payload: StoreFileInstruction{
+				ServerID: s.ID,
+				FileKey:  hashKey(key),
+				Size:     size + 16,
 			},
 		}
 		if err := s.broadcastMessage(msg); err != nil {
@@ -164,6 +172,27 @@ func (s *FileServer) Store(key string, r io.Reader, stream bool) error {
 	return nil
 }
 
+func (s *FileServer) Delete(key string) error {
+	if s.store.Has(s.ID, key) {
+		if err := s.store.Delete(s.ID, key); err != nil {
+			return err
+		}
+		log.Printf("(%s): deleted file (%s) from local disk", s.StorageFolder, key)
+	}
+
+	msg := &Message{
+		Payload: DeleteFileInstruction{
+			ServerID: s.ID,
+			FileKey:  hashKey(key),
+		},
+	}
+
+	if err := s.broadcastMessage(msg); err != nil {
+		return err
+	}
+	return nil
+}
+
 // streamFile sends a file to all known connected peers.
 func (s *FileServer) streamFile(file io.Reader) (int64, error) {
 	peers := []io.Writer{}
@@ -173,7 +202,7 @@ func (s *FileServer) streamFile(file io.Reader) (int64, error) {
 	mw := io.MultiWriter(peers...)
 	mw.Write([]byte{p2p.IncomingStream})
 	// Stream the encrypted file.
-	return copyEncrypt(s.Enkey, file, mw)
+	return copyEncrypt(s.Encryptionkey, file, mw)
 }
 
 // broadcastMessage sends a message to all known connected peers
@@ -204,6 +233,7 @@ func (s *FileServer) loop() {
 			var msg Message
 			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
 				log.Println("Decoder error: ", err)
+				continue
 			}
 			if err := s.handleMessage(rpc.From.String(), &msg); err != nil {
 				log.Println("Handle Message Error: ", err)
@@ -217,23 +247,33 @@ func (s *FileServer) loop() {
 // handleMessage handles messages recieved over the rpcch channel from store.
 func (s *FileServer) handleMessage(from string, msg *Message) error {
 	switch msg.Payload.(type) {
-	case MessageStoreFile:
-		log.Printf("(%s): store file message request form (%s) for file (%s)\n",
+	case StoreFileInstruction:
+		log.Printf("(%s): [store file] request form (%s) for file (%s)\n",
 			s.StorageFolder,
 			from,
-			msg.Payload.(MessageStoreFile).Key,
+			msg.Payload.(StoreFileInstruction).FileKey,
 		)
-		if err := s.handleMessageStoreFile(from, msg.Payload.(MessageStoreFile)); err != nil {
+		if err := s.handleStoreFile(from, msg.Payload.(StoreFileInstruction)); err != nil {
 			return err
 		}
 
-	case MessageGetFile:
-		log.Printf("(%s): get file message request form (%s) for file (%s)\n",
+	case GetFileInstruction:
+		log.Printf("(%s): [get file] request form (%s) for file (%s)\n",
 			s.StorageFolder,
 			from,
-			msg.Payload.(MessageGetFile).Key,
+			msg.Payload.(GetFileInstruction).FileKey,
 		)
-		if err := s.handleMessageGetFile(from, msg.Payload.(MessageGetFile)); err != nil {
+		if err := s.handleGetFile(from, msg.Payload.(GetFileInstruction)); err != nil {
+			return err
+		}
+
+	case DeleteFileInstruction:
+		log.Printf("(%s): [delete file] request form (%s) for file (%s)\n",
+			s.StorageFolder,
+			from,
+			msg.Payload.(DeleteFileInstruction).FileKey,
+		)
+		if err := s.handleDeleteFile(from, msg.Payload.(DeleteFileInstruction)); err != nil {
 			return err
 		}
 
@@ -246,9 +286,9 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 	return nil
 }
 
-// handleMessageStoreFile handles MessageStoreMessages by writing
+// handleStoreFile handles MessageStoreMessages by writing
 // the recieved file from the peer connection onto disk.
-func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) error {
+func (s *FileServer) handleStoreFile(from string, payload StoreFileInstruction) error {
 	log.Printf("(%s): recieving file over network from (%s)...", s.StorageFolder, from)
 	peer, ok := s.peers[from]
 	if !ok {
@@ -256,8 +296,8 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	}
 	defer peer.CloseStream()
 
-	fileStream := io.LimitReader(peer, msg.Size)
-	n, err := s.store.Write(msg.ID, msg.Key, fileStream)
+	fileStream := io.LimitReader(peer, payload.Size)
+	n, err := s.store.Write(payload.ServerID, payload.FileKey, fileStream)
 	if err != nil {
 		return err
 	}
@@ -266,18 +306,18 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 	return nil
 }
 
-// handleMessageGetFile handles MessageGetFile messages.
-func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
-	if !s.store.Has(msg.ID, msg.Key) {
-		return fmt.Errorf("(%s): file (%s) not found \n", s.StorageFolder, msg.Key)
+// handleGetFile handles MessageGetFile messages.
+func (s *FileServer) handleGetFile(from string, payload GetFileInstruction) error {
+	if !s.store.Has(payload.ServerID, payload.FileKey) {
+		return fmt.Errorf("(%s): file (%s) not found", s.StorageFolder, payload.FileKey)
 	}
 
 	peer, ok := s.peers[from]
 	if !ok {
-		return fmt.Errorf("(%s): peer (%s) not found \n", s.StorageFolder, from)
+		return fmt.Errorf("(%s): peer (%s) not found", s.StorageFolder, from)
 	}
 
-	size, r, err := s.store.Read(msg.ID, msg.Key)
+	size, r, err := s.store.Read(payload.ServerID, payload.FileKey)
 	if err != nil {
 		return err
 	}
@@ -297,10 +337,27 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 	log.Printf(
 		"(%s): streamed file (%s) of size (%d) bytes to (%s)\n",
 		s.StorageFolder,
-		msg.Key,
+		payload.FileKey,
 		n,
 		from,
 	)
+	return nil
+}
+
+// handleDeleteFile handles MessageGetFile messages.
+func (s *FileServer) handleDeleteFile(from string, payload DeleteFileInstruction) error {
+	err := s.store.Delete(payload.ServerID, payload.FileKey)
+	if err != nil {
+		return err
+	}
+
+	log.Printf(
+		"(%s): deleted file (%s) from (%s)\n",
+		s.StorageFolder,
+		payload.FileKey,
+		from,
+	)
+
 	return nil
 }
 

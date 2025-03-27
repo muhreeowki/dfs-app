@@ -41,7 +41,7 @@ func CASPathTransformFunc(id, key, storageFolder string) *PathKey {
 	blockSize := 8
 	sliceLen := len(hashStr) / blockSize
 	paths := make([]string, sliceLen)
-	for i := 0; i < sliceLen; i++ {
+	for i := range sliceLen {
 		from, to := i*blockSize, (i*blockSize)+blockSize
 		paths[i] = hashStr[from:to]
 	}
