@@ -19,13 +19,13 @@ func main() {
 	s3 := makeServer("store3", ":8000", ":3000", ":4000")
 
 	go s1.Start()
-	time.Sleep(time.Millisecond * 1)
+	time.Sleep(time.Millisecond * 10)
 
 	go s2.Start()
-	time.Sleep(time.Millisecond * 1)
+	time.Sleep(time.Millisecond * 10)
 
 	go s3.Start()
-	time.Sleep(time.Millisecond * 1)
+	time.Sleep(time.Millisecond * 10)
 
 	select {}
 }

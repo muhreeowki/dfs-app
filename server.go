@@ -367,12 +367,12 @@ func (s *FileServer) bootstrapNetwork() error {
 		if len(addr) == 0 {
 			continue
 		}
-		go func() {
-			log.Printf("[%s]: Attempting to connect to: %s", s.Transport.Addr(), addr)
-			if err := s.Transport.Dail(addr); err != nil {
-				log.Printf("Failed to connect to %v: %v\n", addr, err)
+		go func(a string) {
+			log.Printf("[%s]: Attempting to connect to: %s", s.Transport.Addr(), a)
+			if err := s.Transport.Dail(a); err != nil {
+				log.Printf("Failed to connect to %v: %v\n", a, err)
 			}
-		}()
+		}(addr)
 	}
 	return nil
 }

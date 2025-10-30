@@ -154,9 +154,14 @@ func (t *TCPTransport) handleConn(conn net.Conn, outbound bool) {
 		}
 		if rpc.Stream {
 			peer.wg.Add(1)
-			log.Printf("Incoming stream from [ %s ], waiting till stream is done...", rpc.From.String())
+			log.Printf(
+				"Incoming stream from [ %s ], waiting till stream is done...",
+				rpc.From.String(),
+			)
 			peer.wg.Wait()
-			log.Printf("Closed stream from [ %s ]. Resuming read loop...", rpc.From.String())
+			log.Printf("Closed stream from [ %s ]. Resuming read loop...",
+				rpc.From.String(),
+			)
 			continue
 		}
 
